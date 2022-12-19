@@ -1,22 +1,37 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
 #include <omp.h> 
 
 #define TASK_SIZE 1000
+struct Compare { float val; int index; };
+#pragma omp declare reduction(maximum : struct Compare : omp_out = omp_in.val > omp_out.val ? omp_in : omp_out)
 
-void writeToFile(float* array, int lines, int type){ 
-    //quick 
-    if(type == 0) {
-        FILE* file = fopen("outputquick.txt", "w");
+void writeToFile(float* array, int lines, char* type){ 
+    if(!strcmp(type, "Q")) {
+        FILE* file = fopen("outputq.txt", "w");
         int i;
         for(i = 0; i < lines; i++) fprintf(file, "%f\n", array[i]);
     }
 
-    FILE* file = fopen("outputselect.txt", "w");
-    int i;
-    for(i = 0; i < lines; i++) fprintf(file, "%f\n", array[i]);
+    if(!strcmp(type, "PQ")) {
+        FILE* file = fopen("outputpq.txt", "w");
+        int i;
+        for(i = 0; i < lines; i++) fprintf(file, "%f\n", array[i]);
+    }
 
+    if(!strcmp(type, "S")) {
+        FILE* file = fopen("outputs.txt", "w");
+        int i;
+        for(i = 0; i < lines; i++) fprintf(file, "%f\n", array[i]);
+    }
+
+    if(!strcmp(type, "PS")) {
+        FILE* file = fopen("outputps.txt", "w");
+        int i;
+        for(i = 0; i < lines; i++) fprintf(file, "%f\n", array[i]);
+    }
 }
 
 int countLines(char* filePath){ 
@@ -107,6 +122,28 @@ void selectionSort(float array[], int n)
 
 // ------------------------------------------------------- // 
 
+// -- FUNÇÕES PARA IMPLEMENTAÇÃO SELECTION SORT PARALELO -- //
+
+
+void parallel_selectionSort(float* array, int lines){
+	
+    int startpos;
+	for(startpos = 0; startpos < lines; startpos++){
+		struct Compare max;
+        max.val = array[startpos];
+        max.index = startpos;
+
+        #pragma omp parallel for reduction(maximum:max)
+		for(int i=startpos +1; i< lines; ++i){
+			if(array[i] > max.val){
+				max.val = array[i];
+				max.index = i;
+			}
+		}
+
+		swap(&array[startpos], &array[max.index]);
+	}
+}
 
 
 // ------- FUNÇÕES PARA IMPLEMENTAÇÃO QUICK SORT PARALELO ------- //
@@ -152,64 +189,56 @@ void parallel_quickSort(float * array, int low, int high)
 
 int main (int argc, char** argv){ 
 
-    printf("Started app");
-    int lines = countLines(argv[1]);
-    printf("Finished couting lines");
     double start, end;
-/*
-    //QUICK SORT
-    float* arrayQuick = readFromFile(argv[1], lines);
-    //------------------------------------------------------------
-    double time_quick;
-    start = clock();
-    quickSort(arrayQuick, 0, lines - 1);
-    end = clock();
-    time_quick = ((double) (end - start)) / CLOCKS_PER_SEC; 
-    //-------------------------------------------------------------
-    writeToFile (arrayQuick, lines, 0);
-
-
-    //SELECTION SORT
-    float* arraySelect = readFromFile(argv[1], lines);
-    //------------------------------------------------------------
-    double time_select;
-    start = clock();
-    selectionSort(arraySelect, lines);
-    end = clock();
-    time_select = ((double) (end - start)) / CLOCKS_PER_SEC; 
-    //------------------------------------------------------------
-    writeToFile (arraySelect, lines, 1);
-
-
-
-
-    //QUICK SORT
-    float* arrayQuick = readFromFile(argv[1], lines);
-    //------------------------------------------------------------
-    start = omp_get_wtime();
-    quickSort(arrayQuick, 0, lines - 1);
-    end = omp_get_wtime();
-    printf("QuickSort: %lf\n", (end - start));
-    //-------------------------------------------------------------
-*/
-    //PARALLEL QUICK SORT
-
+    int lines = countLines(argv[1]);
+    float* array = readFromFile(argv[1], lines);
 
     omp_set_dynamic(0);
-    omp_set_num_threads(1);
-    printf("Started read from file");
-    float* arrayPQuick = readFromFile(argv[1], lines);
-    printf("finished read from file and started parallel");
-    //------------------------------------------------------------
-    start = omp_get_wtime();
-    #pragma omp parallel 
-    {
-        #pragma omp single
-        parallel_quickSort(arrayPQuick, 0, lines -1);
+    omp_set_num_threads(4);
+
+    if(!strcmp(argv[2], "Q")) {
+        printf("Execução com QuickSort\n");
+        start = omp_get_wtime();
+        quickSort(array, 0, lines - 1);
+        end = omp_get_wtime();
+        printf("Tempo de Execução: %.5lf", (end - start));
+        writeToFile(array, lines, argv[2]);
+        
     }
-    end = omp_get_wtime();
-    printf("Parallel QuickSort: %lf", (end - start));
-    //------------------------------------------------------------
+
+    if(!strcmp(argv[2], "PQ")) {
+        printf("Execução com Parallel QuickSort\n");
+        start = omp_get_wtime();
+
+        #pragma omp parallel 
+        {
+            #pragma omp single
+            parallel_quickSort(array, 0, lines -1);
+        }
+
+        end = omp_get_wtime();
+        printf("Tempo de Execução: %.5lf", (end - start));
+        writeToFile(array, lines, argv[2]);
+
+    }
+
+    if(!strcmp(argv[2], "S")) {
+        printf("Execução com Selection Sort\n");
+        start = omp_get_wtime();
+        selectionSort(array, lines);
+        end = omp_get_wtime();
+        printf("Tempo de Execução: %.5lf", (end - start));
+        writeToFile(array, lines, argv[2]);
+    }
+
+    if(!strcmp(argv[2], "PS")) {
+        printf("Execução com Parallel Selection Sort\n");
+        start = omp_get_wtime();
+        parallel_selectionSort(array, lines);
+        end = omp_get_wtime();
+        printf("Tempo de Execução: %.5lf", (end - start));
+        writeToFile(array, lines, argv[2]);
+    }
 
     return 0;
 }
