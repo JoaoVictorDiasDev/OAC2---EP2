@@ -4,10 +4,13 @@
 #include <string.h>
 #include <omp.h> 
 
-#define TASK_SIZE 1000
-struct Compare { float val; int index; };
-#pragma omp declare reduction(maximum : struct Compare : omp_out = omp_in.val > omp_out.val ? omp_in : omp_out)
+#define min 100
+struct dataComp { float n; int i; };
 
+#pragma omp declare reduction(maximum : struct dataComp : omp_out = omp_in.n > omp_out.n ? omp_in : omp_out)
+
+// Escreve array resultante da ordenção no arquivo de output
+// O arquivo de output é decidido de acordo com o type
 void writeToFile(float* array, int lines, char* type){ 
     if(!strcmp(type, "Q")) {
         FILE* file = fopen("outputq.txt", "w");
@@ -34,6 +37,7 @@ void writeToFile(float* array, int lines, char* type){
     }
 }
 
+// Conta as linhas de um arquivo
 int countLines(char* filePath){ 
     FILE* file = fopen(filePath, "r");
     char c;
@@ -44,6 +48,7 @@ int countLines(char* filePath){
     return count;
 }
 
+// Lê o conteúdo do arquivo e retorno um array de float com os dados
 float* readFromFile (char* filePath, int lines) { 
     float* array = malloc(lines*(sizeof(float)));
     int i = 0;
@@ -57,18 +62,19 @@ float* readFromFile (char* filePath, int lines) {
     return array;
 }
 
+// função genérica para inversão de dois floats em um array
 void swap(float *a, float *b) {
     float t = *a;
     *a = *b;
     *b = t;
 }
 
-// ------ FUNÇÕES IMPLEMENTAÇÃO QUICK SORT ------------- //
+
 
 int partition(float array[], int low, int high) {
     // pivot = maior elemento do array
     float pivot = array[high];
-    // index do menor elemento 
+    // i do menor elemento 
     // i = indica elemento a esquerda do pivot 
     int i = (low - 1);
     //compara todos elementos do array com o pivot
@@ -76,6 +82,7 @@ int partition(float array[], int low, int high) {
         // Se o elemento for menor que o pivot
         if (array[j] <= pivot) {
             i++;
+            // inverte elementos 
             swap(&array[i], &array[j]);
         }
     }
@@ -96,90 +103,62 @@ int quickSort(float array[], int low, int high){
     }
 }
 
-// --------------------------------------------------------- // 
-
-
 // ------- FUNÇÕES PARA IMPLEMENTAÇÃO SELECTION SORT ------- //
 
 void selectionSort(float array[], int n)
 {
-    int i, j, min;
+    int i, j;
+    int min;
  
     //iteracao na parte nao ordenada do array
     for (i = 0; i < n-1; i++)
     {
-        //Encontra o menor valor no array 
+        // Encontra o menor nor no array 
         min = i;
-        for (j = i+1; j < n; j++) {
-            if (array[j] < array[min])
-                min = j;
-        }
- 
-        //Inverte menor valor com o primeiro elemento
+        // itera sobre o array, invertendo os elementos quando necessário 
+        for (j = i+1; j < n; j++) if (array[j] < array[min]) min = j;
+
+        //Inverte menor nor com o primeiro elemento
         if(min != i) swap(&array[min], &array[i]);
     }
 }
 
-// ------------------------------------------------------- // 
-
 // -- FUNÇÕES PARA IMPLEMENTAÇÃO SELECTION SORT PARALELO -- //
 
-
-void parallel_selectionSort(float* array, int lines){
-	
-    int startpos;
-	for(startpos = 0; startpos < lines; startpos++){
-		struct Compare max;
-        max.val = array[startpos];
-        max.index = startpos;
+void parallel_selectionSort(float* array, int lines){	
+    int inicial;
+    //itera sobre todas posições do array 
+	for(inicial = 0; inicial < lines; inicial++){
+        //a cada iteração, define o máximo e seu indice
+		struct dataComp max;
+        max.n = array[inicial];
+        max.i = inicial;
 
         #pragma omp parallel for reduction(maximum:max)
-		for(int i=startpos +1; i< lines; ++i){
-			if(array[i] > max.val){
-				max.val = array[i];
-				max.index = i;
+        // para cada entrada do array com todas as outras
+		for(int i=inicial +1; i< lines; ++i){
+			if(array[i] > max.n){
+				max.n = array[i];
+				max.i = i;
 			}
 		}
 
-		swap(&array[startpos], &array[max.index]);
+        // inverte elemento atual com o maior elemento encontrado
+		swap(&array[inicial], &array[max.i]);
 	}
 }
 
-
 // ------- FUNÇÕES PARA IMPLEMENTAÇÃO QUICK SORT PARALELO ------- //
-
-
-int parallel_partion(float * array, int low, int high)
-{
-    float* lt = malloc (sizeof(float) * (high - low));
-    float* gt = malloc (sizeof(float) * (high - low));
-    int i;
-    int j;
-    float key = array[high];
-    int lt_n = 0;
-    int gt_n = 0;
-
-    for(i = low; i < high; i++){
-        if(array[i] < array[high]) lt[lt_n++] = array[i];
-        else gt[gt_n++] = array[i];
-    }   
-
-    for(i = 0; i < lt_n; i++) array[low + i] = lt[i];
-    array[low + lt_n] = key;
-    for(j = 0; j < gt_n; j++) array[low + lt_n + j + 1] = gt[j];
-
-    return low + lt_n;
-}
 
 void parallel_quickSort(float * array, int low, int high)
 {
     int p;
 
     if(low < high){ 
-        p = parallel_partion(array, low, high); 
-        #pragma omp task shared(array) if(high - p > TASK_SIZE) 
+        p = partition(array, low, high); 
+        #pragma omp task shared(array) if(high - low > min) 
         parallel_quickSort(array, low, p - 1); 
-        #pragma omp task shared(array) if(high - p > TASK_SIZE)
+        #pragma omp task shared(array) if(high - low > min)
         parallel_quickSort(array, p + 1, high); 
     }
 }
@@ -193,7 +172,6 @@ int main (int argc, char** argv){
     int lines = countLines(argv[1]);
     float* array = readFromFile(argv[1], lines);
 
-    omp_set_dynamic(0);
     omp_set_num_threads(4);
 
     if(!strcmp(argv[2], "Q")) {
@@ -201,7 +179,7 @@ int main (int argc, char** argv){
         start = omp_get_wtime();
         quickSort(array, 0, lines - 1);
         end = omp_get_wtime();
-        printf("Tempo de Execução: %.5lf", (end - start));
+        printf("Tempo de Execução: %.5lf\n", (end - start));
         writeToFile(array, lines, argv[2]);
         
     }
@@ -217,7 +195,7 @@ int main (int argc, char** argv){
         }
 
         end = omp_get_wtime();
-        printf("Tempo de Execução: %.5lf", (end - start));
+        printf("Tempo de Execução: %.5lf\n", (end - start));
         writeToFile(array, lines, argv[2]);
 
     }
@@ -227,7 +205,7 @@ int main (int argc, char** argv){
         start = omp_get_wtime();
         selectionSort(array, lines);
         end = omp_get_wtime();
-        printf("Tempo de Execução: %.5lf", (end - start));
+        printf("Tempo de Execução: %.5lf\n", (end - start));
         writeToFile(array, lines, argv[2]);
     }
 
@@ -236,7 +214,7 @@ int main (int argc, char** argv){
         start = omp_get_wtime();
         parallel_selectionSort(array, lines);
         end = omp_get_wtime();
-        printf("Tempo de Execução: %.5lf", (end - start));
+        printf("Tempo de Execução: %.5lf\n", (end - start));
         writeToFile(array, lines, argv[2]);
     }
 
