@@ -7,33 +7,33 @@
 #define min 100
 struct dataComp { float n; int i; };
 
-#pragma omp declare reduction(maximum : struct dataComp : omp_out = omp_in.n > omp_out.n ? omp_in : omp_out)
+#pragma omp declare reduction(compReduction : struct dataComp : omp_out = omp_in.n > omp_out.n ? omp_in : omp_out)
 
 // Escreve array resultante da ordenção no arquivo de output
 // O arquivo de output é decidido de acordo com o type
 void writeToFile(float* array, int lines, char* type){ 
     if(!strcmp(type, "Q")) {
-        FILE* file = fopen("outputq.txt", "w");
+        FILE* file = fopen("output_q.txt", "w");
         int i;
         for(i = 0; i < lines; i++) fprintf(file, "%f\n", array[i]);
     }
 
     if(!strcmp(type, "PQ")) {
-        FILE* file = fopen("outputpq.txt", "w");
+        FILE* file = fopen("output_pq.txt", "w");
         int i;
         for(i = 0; i < lines; i++) fprintf(file, "%f\n", array[i]);
     }
 
     if(!strcmp(type, "S")) {
-        FILE* file = fopen("outputs.txt", "w");
+        FILE* file = fopen("output_s.txt", "w");
         int i;
         for(i = 0; i < lines; i++) fprintf(file, "%f\n", array[i]);
     }
 
     if(!strcmp(type, "PS")) {
-        FILE* file = fopen("outputps.txt", "w");
+        FILE* file = fopen("output_ps.txt", "w");
         int i;
-        for(i = 0; i < lines; i++) fprintf(file, "%f\n", array[i]);
+        for(i = lines - 1; i >= 0; i--) fprintf(file, "%f\n", array[i]);
     }
 }
 
@@ -69,8 +69,6 @@ void swap(float *a, float *b) {
     *b = t;
 }
 
-
-
 int partition(float array[], int low, int high) {
     // pivot = maior elemento do array
     float pivot = array[high];
@@ -103,52 +101,47 @@ int quickSort(float array[], int low, int high){
     }
 }
 
-// ------- FUNÇÕES PARA IMPLEMENTAÇÃO SELECTION SORT ------- //
 
 void selectionSort(float array[], int n)
 {
     int i, j;
-    int min;
+    int minimo;
  
     //iteracao na parte nao ordenada do array
     for (i = 0; i < n-1; i++)
     {
-        // Encontra o menor nor no array 
-        min = i;
+        minimo = i;
         // itera sobre o array, invertendo os elementos quando necessário 
-        for (j = i+1; j < n; j++) if (array[j] < array[min]) min = j;
+        for (j = i+1; j < n; j++) if (array[j] < array[minimo]) minimo = j;
 
         //Inverte menor nor com o primeiro elemento
-        if(min != i) swap(&array[min], &array[i]);
+        if(minimo != i) swap(&array[minimo], &array[i]);
     }
 }
 
-// -- FUNÇÕES PARA IMPLEMENTAÇÃO SELECTION SORT PARALELO -- //
 
 void parallel_selectionSort(float* array, int lines){	
     int inicial;
     //itera sobre todas posições do array 
 	for(inicial = 0; inicial < lines; inicial++){
         //a cada iteração, define o máximo e seu indice
-		struct dataComp max;
-        max.n = array[inicial];
-        max.i = inicial;
+		struct dataComp data;
+        data.n = array[inicial];
+        data.i = inicial;
 
-        #pragma omp parallel for reduction(maximum:max)
-        // para cada entrada do array com todas as outras
+        #pragma omp parallel for reduction(compReduction:data)
 		for(int i=inicial +1; i< lines; ++i){
-			if(array[i] > max.n){
-				max.n = array[i];
-				max.i = i;
+			if(array[i] > data.n){
+				data.n = array[i];
+				data.i = i;
 			}
 		}
 
         // inverte elemento atual com o maior elemento encontrado
-		swap(&array[inicial], &array[max.i]);
+		swap(&array[inicial], &array[data.i]);
 	}
 }
 
-// ------- FUNÇÕES PARA IMPLEMENTAÇÃO QUICK SORT PARALELO ------- //
 
 void parallel_quickSort(float * array, int low, int high)
 {
@@ -162,8 +155,6 @@ void parallel_quickSort(float * array, int low, int high)
         parallel_quickSort(array, p + 1, high); 
     }
 }
-
-// ----------------------------------------------------------------------------------- // 
 
 
 int main (int argc, char** argv){ 
